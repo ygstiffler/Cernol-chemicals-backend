@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: cernol-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    port: 5000
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        fromSecret: mongodb_uri
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: 587
+      - key: EMAIL_USER
+        fromSecret: email_user
+      - key: EMAIL_PASS
+        fromSecret: email_pass
+      - key: ADMIN_EMAIL
+        fromSecret: admin_email
+      - key: REDIS_HOST
+        value: ""  # Leave empty if not using Redis
+      - key: REDIS_PORT
+        value: 6379
+      - key: REDIS_PASSWORD
+        value: ""
