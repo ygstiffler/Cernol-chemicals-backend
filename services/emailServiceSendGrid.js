@@ -7,12 +7,27 @@ const sgMail = require('@sendgrid/mail');
  */
 class EmailService {
   constructor() {
+    console.log('Initializing SendGrid email service...');
+    console.log('Environment variables check:', {
+      NODE_ENV: process.env.NODE_ENV,
+      SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? '***' + process.env.SENDGRID_API_KEY.slice(-4) : 'Not found',
+      EMAIL_FROM: process.env.EMAIL_FROM || 'Not set'
+    });
+    
     if (!process.env.SENDGRID_API_KEY) {
-      throw new Error('SENDGRID_API_KEY is required in environment variables');
+      const error = new Error('SENDGRID_API_KEY is required in environment variables');
+      console.error('Email service initialization failed:', error.message);
+      throw error;
     }
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    this.sgMail = sgMail;
-    console.log('SendGrid email service initialized successfully');
+    
+    try {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      this.sgMail = sgMail;
+      console.log('✅ SendGrid email service initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize SendGrid:', error.message);
+      throw error;
+    }
   }
 
   /**
