@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const Contact = require('./models/Contact');
 const Quote = require('./models/Quote');
-const emailService = require('./services/emailService');
+const emailService = require('./services/emailServiceSendGrid');
 const InputSanitizer = require('./utils/inputSanitizer');
 
 const app = express();
