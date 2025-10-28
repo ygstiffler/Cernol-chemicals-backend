@@ -18,7 +18,7 @@ console.log('🔧 Environment Check:');
 console.log('- NODE_ENV:', process.env.NODE_ENV || 'development');
 console.log('- PORT:', PORT);
 console.log('- MongoDB URI:', process.env.MONGODB_URI ? 'Set (Atlas)' : 'Not set (using localhost)');
-console.log('- Email Service:', process.env.EMAIL_HOST ? 'Configured' : 'Not configured');
+console.log('- Email Service:', process.env.SENDGRID_API_KEY ? 'SendGrid Configured' : 'Not configured');
 
 // Validate critical environment variables
 if (!process.env.ADMIN_EMAIL) {
