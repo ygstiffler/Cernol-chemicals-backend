@@ -154,10 +154,27 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ error: 'Health check failed' });
   }
 });
+// Background email processing function
+async function processContactEmails(contactData) {
+  try {
+    // Send confirmation email
+    await emailService.sendConfirmationEmail(contactData);
+    
+    // Send admin notification
+    await emailService.sendAdminNotification(contactData);
+    
+    console.log(`✅ Emails processed for contact: ${contactData._id}`);
+  } catch (error) {
+    console.error(`❌ Error processing emails for contact ${contactData._id}:`, error);
+    // Log the error but don't throw - we don't want to fail the main request
+  }
+}
+
 // Contact form submission endpoint (optimized for speed)
 app.post('/api/contact', async (req, res) => {
   try {
     const rawData = req.body;
+    const startTime = Date.now();
 
     // Quick input sanitization (faster than full validation)
     const sanitizedData = InputSanitizer.sanitizeContactData(rawData);
@@ -170,6 +187,7 @@ app.post('/api/contact', async (req, res) => {
 
     if (!hasCriticalData) {
       return res.status(400).json({
+        success: false,
         error: 'Missing required fields',
         required: criticalFields
       });
@@ -179,6 +197,7 @@ app.post('/api/contact', async (req, res) => {
     const emailRegex = /^[^\/\s@]+@[^\/\s@]+\.[^\/\s@]+$/;
     if (!emailRegex.test(sanitizedData.email)) {
       return res.status(400).json({
+        success: false,
         error: 'Invalid email format',
         field: 'email',
         message: 'Please enter a valid email address'
@@ -203,31 +222,36 @@ app.post('/api/contact', async (req, res) => {
       subject: sanitizedData.subject,
       message: sanitizedData.message,
       service,
+      emailStatus: 'pending' // Track email status
     });
+
     // Save to database (fast operation)
     const savedContact = await contact.save();
+    
+    // Process emails in the background
+    process.nextTick(() => {
+      processContactEmails(savedContact)
+        .then(() => {
+          // Update email status in database
+          Contact.findByIdAndUpdate(savedContact._id, { emailStatus: 'sent' })
+            .catch(err => console.error('Error updating email status:', err));
+        })
+        .catch(err => {
+          console.error('Background email processing error:', err);
+          Contact.findByIdAndUpdate(savedContact._id, { emailStatus: 'failed' })
+            .catch(updateErr => console.error('Error updating failed status:', updateErr));
+        });
+    });
 
-    // Send emails directly (immediate processing)
-    const confirmationResult = await emailService.sendConfirmationEmail(savedContact);
-
-    if (!confirmationResult.success) {
-      // Continue anyway - admin notification is more important
-    }
-
-    const adminResult = await emailService.sendAdminNotification(savedContact);
-
-    if (!adminResult.success) {
-      return res.status(500).json({
-        error: 'Failed to send notification emails',
-        details: 'Contact saved but email notifications failed'
-      });
-    }
-
-    res.status(201).json({
+    // Respond immediately (don't wait for emails to be sent)
+    const responseTime = Date.now() - startTime;
+    console.log(`✅ Contact form processed in ${responseTime}ms`);
+    
+    res.status(202).json({
       success: true,
-      message: 'Contact form submitted successfully! We\'ll get back to you soon.',
+      message: 'Thank you for contacting us! We have received your message and will get back to you soon.',
       contactId: savedContact._id,
-      responseTime: Date.now()
+      responseTime: `${responseTime}ms`
     });
 
   } catch (error) {
@@ -236,6 +260,7 @@ app.post('/api/contact', async (req, res) => {
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
+        success: false,
         error: 'Validation error',
         details: errors,
         message: 'Please check your input data'
@@ -244,14 +269,17 @@ app.post('/api/contact', async (req, res) => {
 
     if (error.name === 'MongoNetworkError' || error.name === 'MongoTimeoutError') {
       return res.status(503).json({
+        success: false,
         error: 'Database temporarily unavailable',
         message: 'Please try again in a few moments'
       });
     }
 
     res.status(500).json({
+      success: false,
       error: 'Server error occurred while processing your request',
-      message: 'Please try again later'
+      message: 'Please try again later',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

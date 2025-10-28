@@ -48,6 +48,16 @@ const contactSchema = new mongoose.Schema({
     trim: true,
     maxlength: [1000, 'Message cannot exceed 1000 characters']
   },
+  emailStatus: {
+    type: String,
+    enum: ['pending', 'sent', 'failed'],
+    default: 'pending',
+    index: true
+  },
+  emailError: {
+    type: String,
+    default: null
+  },
   
 }, {
   timestamps: true // Adds createdAt and updatedAt fields
