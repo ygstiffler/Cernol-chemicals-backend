@@ -18,14 +18,39 @@ console.log('🔧 Environment Check:');
 console.log('- NODE_ENV:', process.env.NODE_ENV || 'development');
 console.log('- PORT:', PORT);
 console.log('- MongoDB URI:', process.env.MONGODB_URI ? 'Set (Atlas)' : 'Not set (using localhost)');
-console.log('- Email Service:', process.env.SENDGRID_API_KEY ? 'SendGrid Configured' : 'Not configured');
+
+// Enhanced Email Service Status Check
+console.log('📧 Email Service Status:');
+if (process.env.SENDGRID_API_KEY) {
+  console.log('  ✅ SendGrid API Key: Configured');
+  console.log(`  📧 Sender Email: ${process.env.EMAIL_FROM || 'Not configured (EMAIL_FROM missing)'}`);
+  console.log(`  👤 Admin Email: ${process.env.ADMIN_EMAIL || 'Not configured (ADMIN_EMAIL missing)'}`);
+  
+  // Test if email service is properly initialized
+  let isEmailServiceReady = false;
+  try {
+    // Only initialize if not already done by the email service
+    if (!process.sgMailInitialized) {
+      const sgMail = require('@sendgrid/mail');
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      process.sgMailInitialized = true; // Mark as initialized
+    }
+    isEmailServiceReady = true;
+    console.log('  🟢 Email Service: Ready to send emails');
+  } catch (error) {
+    console.error('  🔴 Email Service: Initialization failed -', error.message);
+    // Don't throw here, let the application start but mark service as unavailable
+  }
+} else {
+  console.log('  🔴 Email Service: Not configured (SENDGRID_API_KEY missing)');
+}
 
 // Validate critical environment variables
 if (!process.env.ADMIN_EMAIL) {
-  console.warn('  Warning: ADMIN_EMAIL not set, using fallback');
+  console.warn('  ⚠️ Warning: ADMIN_EMAIL not set, using fallback');
 }
 
-console.log(' Starting Cernol Chemicals Backend Server...');
+console.log('🚀 Starting Cernol Chemicals Backend Server...');
 
 // Middleware with better error handling
 app.use(cors());
@@ -136,24 +161,50 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Health check endpoint with email service status
+// Health check endpoint with detailed service status
 app.get('/api/health', async (req, res) => {
   try {
-    // Test email service configuration
-    const emailConfigValid = process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.ADMIN_EMAIL;
+    // Check email service configuration
+    const emailConfig = {
+      sendgrid: !!process.env.SENDGRID_API_KEY,
+      fromEmail: !!process.env.EMAIL_FROM,
+      adminEmail: !!process.env.ADMIN_EMAIL
+    };
+    
+    // Determine email service status
+    let emailServiceStatus = 'misconfigured';
+    if (emailConfig.sendgrid && emailConfig.fromEmail) {
+      emailServiceStatus = 'ready';
+    }
 
     res.json({
-      status: 'OK',
-      timestamp: new Date().toISOString(),
-      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      emailService: emailConfigValid ? 'configured' : 'missing-config',
-      port: PORT
+      status: 'ok',
+      services: {
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        email: emailServiceStatus,
+        environment: process.env.NODE_ENV || 'development',
+        version: require('./package.json').version
+      },
+      config: {
+        email: {
+          provider: 'SendGrid',
+          fromConfigured: emailConfig.fromEmail,
+          adminConfigured: emailConfig.adminEmail,
+          apiKeyConfigured: emailConfig.sendgrid ? 'configured' : 'missing'
+        }
+      },
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
-    // Log health check error
-    res.status(500).json({ error: 'Health check failed' });
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
+
 // Background email processing function
 async function processContactEmails(contactData) {
   try {
@@ -473,7 +524,7 @@ const server = app.listen(PORT, () => {
   }
   console.log('🚀 Cernol Chemicals Backend is ready!');
   console.log('🔒 Security: Basic headers and error handling enabled');
-  console.log('📧 Email service:', process.env.EMAIL_HOST ? 'configured' : 'not configured');
+  console.log('📧 Email service:', process.env.SENDGRID_API_KEY ? 'SendGrid configured' : 'not configured');
   console.log('🗄️  Database:', process.env.MONGODB_URI ? 'Atlas (production)' : 'Localhost (development)');
   console.log('🛡️  Endpoints protected with validation and sanitization');
 })
